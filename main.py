@@ -35,7 +35,7 @@ class Main(star.Star):
         self.context = context
         self.prob = 0.05  # 默认触发概率为 0.3
         self.triggers = DEFAULT_TRIGGERS.copy()
-        self.target_id = "1033819097"  # 目标用户ID
+        self.target_id = "123456789"  # 目标用户ID
         self.timer_task = None
         
     async def initialize(self):
