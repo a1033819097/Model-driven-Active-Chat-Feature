@@ -27,6 +27,27 @@ AstrBot 插件
 触发语句
 默认触发语句存储在 DEFAULT_TRIGGERS 列表中，可通过命令添加或删除。
 
+插件命令
+插件提供了以下命令用于管理和配置：
+
+设置触发概率
+/set_prob <概率值>
+参数：<概率值>（范围：0 ~ 1）
+示例：/set_prob 0.1
+
+查看当前触发概率
+/list_prob
+
+查看所有触发语句
+/list_trigger
+
+添加新的触发语句
+/add_trigger <触发语句>
+/add_trigger 你今天过得怎么样？
+
+删除指定触发语句
+/del_trigger <编号>
+
 # 支持
 
 [帮助文档](https://astrbot.soulter.top/center/docs/%E5%BC%80%E5%8F%91/%E6%8F%92%E4%BB%B6%E5%BC%80%E5%8F%91/
