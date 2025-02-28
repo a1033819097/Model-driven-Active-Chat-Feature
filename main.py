@@ -1,6 +1,7 @@
 import random
 import asyncio
 import json
+from datetime import datetime, timedelta
 import astrbot.api.star as star
 import astrbot.api.event.filter as filter
 from astrbot.api.event import AstrMessageEvent, MessageEventResult
@@ -35,10 +36,11 @@ DEFAULT_TRIGGERS = [
 class Main(star.Star):
     def __init__(self, context: star.Context) -> None:
         self.context = context
-        self.prob = 0.05
+        self.prob = 0.02
         self.triggers = DEFAULT_TRIGGERS.copy()
-        self.target_id = "123456789"
+        self.target_id = "1033819097"
         self.timer_task = None
+        self.last_trigger_time = None  # 记录上次触发时间
         
         # 移除人格相关属性，改为从provider_manager获取
         
@@ -51,8 +53,22 @@ class Main(star.Star):
         """定时器循环，每分钟检查一次"""
         while True:
             try:
-                if random.random() < self.prob:
-                    await self._initiate_conversation()
+                current_time = datetime.now()
+                
+                # 修复时间判断逻辑：只在7点到23点59分之间允许触发
+                if 7 <= current_time.hour < 24:
+                    # 检查是否满足间隔时间要求（距离上次触发超过1小时）
+                    if (self.last_trigger_time is None or 
+                        current_time - self.last_trigger_time >= timedelta(hours=1)):
+                        
+                        if random.random() < self.prob:
+                            logger.info(f"触发主动对话检查 - 当前时间: {current_time.strftime('%H:%M:%S')}, "
+                                      f"概率: {self.prob}, 上次触发: "
+                                      f"{self.last_trigger_time.strftime('%H:%M:%S') if self.last_trigger_time else '无'}")
+                            await self._initiate_conversation()
+                            self.last_trigger_time = current_time
+                else:
+                    logger.debug(f"当前时间 {current_time.strftime('%H:%M:%S')} 不在允许的对话时间范围内(07:00-24:00)")
             except Exception as e:
                 logger.error(f"主动对话出错: {e}")
             await asyncio.sleep(60)  # 每分钟检查一次
@@ -129,8 +145,13 @@ class Main(star.Star):
 
     @filter.command("list_prob")
     async def list_prob(self, event: AstrMessageEvent):
-        """列出当前的主动对话概率"""
-        yield event.plain_result(f"当前主动对话概率为: {self.prob}")
+        """列出当前的主动对话概率和时间限制信息"""
+        msg = f"当前主动对话概率为: {self.prob}\n"
+        msg += "对话时间限制：早7点到晚24点\n"
+        msg += "两次对话最小间隔：1小时"
+        if self.last_trigger_time:
+            msg += f"\n上次触发时间：{self.last_trigger_time.strftime('%Y-%m-%d %H:%M:%S')}"
+        yield event.plain_result(msg)
 
     @filter.command("list_trigger")
     async def list_trigger(self, event: AstrMessageEvent):
