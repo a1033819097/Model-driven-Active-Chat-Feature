@@ -10,6 +10,8 @@ from astrbot.api import logger
 from astrbot.core.platform.astrbot_message import AstrBotMessage, MessageMember, MessageType
 from astrbot.core.platform.platform_metadata import PlatformMetadata
 from astrbot.core.provider.manager import Personality
+from astrbot.core.message.components import Plain  # 添加缺失的Plain导入
+from astrbot.core.star.star_handler import star_handlers_registry, EventType  # 添加缺失的导入
 
 DEFAULT_TRIGGERS = [
     "你现在感觉有点无聊，想跟朋友打个招呼吧？那就去和你的朋友问声好吧！",
@@ -88,6 +90,25 @@ class Main(star.Star):
         unified_msg = f"aiocqhttp:FriendMessage:{self.target_id}"
         
         try:
+            # 构造一个模拟的消息事件
+            mock_message = AstrBotMessage()
+            mock_message.type = MessageType.FRIEND_MESSAGE
+            mock_message.message = [Plain(trigger)]
+            mock_message.sender = MessageMember(user_id=self.target_id)
+            mock_message.self_id = self.target_id
+            mock_message.session_id = self.target_id
+            mock_message.message_str = trigger
+            
+            mock_event = AstrMessageEvent(
+                message_str=trigger,
+                message_obj=mock_message,
+                platform_meta=PlatformMetadata(
+                    name="aiocqhttp",
+                    description="模拟的aiocqhttp平台"
+                ),
+                session_id=self.target_id
+            )
+            
             # 获取或创建对话
             curr_cid = await self.context.conversation_manager.get_curr_conversation_id(unified_msg)
             if not curr_cid:
@@ -103,10 +124,8 @@ class Main(star.Star):
                 persona_id = conversation.persona_id
                 
                 if persona_id == "[%None]":
-                    # 用户主动取消了人格
                     system_prompt = ""
                 else:
-                    # 使用默认人格
                     try:
                         default_persona = self.context.provider_manager.selected_default_persona
                         if default_persona:
@@ -114,20 +133,34 @@ class Main(star.Star):
                     except Exception as e:
                         logger.warning(f"获取默认人格失败: {e}")
             
-            # 请求LLM响应
-            llm_response = await provider.text_chat(
+            # 使用标准的LLM请求流程
+            llm_req = mock_event.request_llm(
                 prompt=trigger,
                 session_id=curr_cid,
                 contexts=context,
-                system_prompt=system_prompt
+                system_prompt=system_prompt,
+                conversation=conversation
             )
+            mock_event.set_extra("provider_request", llm_req)
             
-            if not llm_response.completion_text:
+            # 执行LLM请求并获取响应
+            response = await provider.text_chat(**llm_req.__dict__)
+            
+            # 触发on_llm_response事件
+            handlers = star_handlers_registry.get_handlers_by_event_type(EventType.OnLLMResponseEvent)
+            for handler in handlers:
+                try:
+                    await handler.handler(mock_event, response)
+                except Exception as e:
+                    logger.error(f"处理LLM响应时出错: {e}")
+            
+            if not response.completion_text:
                 logger.error("LLM 响应为空")
                 return
                 
-            await self.context.send_message(unified_msg, MessageChain().message(llm_response.completion_text))
-            logger.info(f"已发送主动对话: {trigger} -> {llm_response.completion_text}")
+            # 发送消息
+            await self.context.send_message(unified_msg, MessageChain().message(response.completion_text))
+            logger.info(f"已发送主动对话: {trigger} -> {response.completion_text}")
             
         except Exception as e:
             logger.error(f"主动对话出错: {str(e)}")
